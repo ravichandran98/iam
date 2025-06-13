@@ -1,0 +1,31 @@
+name: Delete RDS Snapshots
+
+on:
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  delete-snapshots:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: AKIAWOAVSJSJMM3HJCTS
+        aws-secret-access-key: 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
+        aws-region: eu-west-1
+
+    - name: Install jq
+      run: sudo apt-get install -y jq
+
+
+    - name: Delete Snapshots Older Than 60 Days
+      run: |
+        DAYS=1
+        NOW=$(date +%s)
+        aws rds describe-db-snapshots --snapshot-type manual \
+        --query "DBSnapshots[?SnapshotCreateTime<=\`$(date -d "-$DAYS days" --iso-8601=seconds)\`]" \
+        --output json | jq -r '.[].DBSnapshotIdentifier' | while read snapshot_id; do
+          echo "Deleting snapshot: $snapshot_id"
+          aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
+        done

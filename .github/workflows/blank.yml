@@ -21,7 +21,7 @@ jobs:
 
     - name: Delete Snapshots Older Than 60 Days
       run: |
-        DAYS=1
+        DAYS=0
         NOW=$(date +%s)
         aws rds describe-db-snapshots --snapshot-type manual \
         --query "DBSnapshots[?SnapshotCreateTime<=\`$(date -d "-$DAYS days" --iso-8601=seconds)\`]" \

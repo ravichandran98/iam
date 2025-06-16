@@ -1,10 +1,10 @@
-name: Delete RDS Snapshots
+name: Delete RDS Snapshots Older Than 1 Day (No jq)
 
-on:
-  workflow_dispatch:  # Allows manual trigger
+on: 
+  workflow_dispatch:      # Allows manual trigger
 
 jobs:
-  delete-snapshots:
+  delete-old-snapshots:
     runs-on: ubuntu-latest
 
     steps:
@@ -15,17 +15,22 @@ jobs:
         aws-secret-access-key: +1Rf9c2RnDp1DIEq+HBUzxqvDuVwBwzpnEBpiKWG
         aws-region: eu-west-1
 
-    - name: Install jq
-      run: sudo apt-get install -y jq
-
-
-    - name: Delete Snapshots Older Than 60 Days
+    - name: Delete Snapshots Older Than 1 Day
       run: |
-        DAYS=0
-        NOW=$(date +%s)
-        aws rds describe-db-snapshots --snapshot-type manual \
-        --query "DBSnapshots[?SnapshotCreateTime<=\`$(date -d "-$DAYS days" --iso-8601=seconds)\`]" \
-        --output json | jq -r '.[].DBSnapshotIdentifier' | while read snapshot_id; do
-          echo "Deleting snapshot: $snapshot_id"
-          aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
-        done
+        THRESHOLD_DATE=$(date -d "1 day ago" --iso-8601=seconds)
+        echo "Looking for snapshots older than: $THRESHOLD_DATE"
+
+        SNAPSHOTS=$(aws rds describe-db-snapshots \
+          --snapshot-type manual \
+          --query "DBSnapshots[?SnapshotCreateTime<=\`${THRESHOLD_DATE}\`].DBSnapshotIdentifier" \
+          --output text)
+
+        if [ -n "$SNAPSHOTS" ]; then
+          echo "Found snapshots to delete:"
+          for snapshot_id in $SNAPSHOTS; do
+            echo "Deleting snapshot: $snapshot_id"
+            aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
+          done
+        else
+          echo "✅ No manual snapshots older than 1 day found. Nothing to delete."
+        fi

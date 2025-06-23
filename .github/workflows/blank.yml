@@ -23,7 +23,7 @@ jobs:
 
         SNAPSHOTS=$(aws rds describe-db-snapshots \
           --snapshot-type manual \
-          --query "DBSnapshots[?SnapshotCreateTime>=\`${THRESHOLD_DATE}\`&& SnapshotCreateTime<=`${START_DATE}`].DBSnapshotIdentifier" \
+          --query "DBSnapshots[?SnapshotCreateTime>=\`${THRESHOLD_DATE}\` && SnapshotCreateTime<=\`${START_DATE}\`].DBSnapshotIdentifier" \
           --output text)
         echo "$SNAPSHOTS"
 

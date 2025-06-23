@@ -25,12 +25,12 @@ jobs:
           --query "DBSnapshots[?SnapshotCreateTime<=\`${THRESHOLD_DATE}\`].DBSnapshotIdentifier" \
           --output text)
 
-        if [ -n "$SNAPSHOTS" ]; then
-          echo "Found snapshots to delete:"
-          for snapshot_id in $SNAPSHOTS; do
-            echo "Deleting snapshot: $snapshot_id"
-            aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
-          done
-        else
-          echo "✅ No manual snapshots older than 1 day found. Nothing to delete."
-        fi
+        # if [ -n "$SNAPSHOTS" ]; then
+        #  echo "Found snapshots to delete:"
+        #  for snapshot_id in $SNAPSHOTS; do
+         #  echo "Deleting snapshot: $snapshot_id"
+        #    aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
+         # done
+       # else
+         # echo "✅ No manual snapshots older than 1 day found. Nothing to delete."
+      #  fi

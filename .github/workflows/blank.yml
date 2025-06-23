@@ -17,12 +17,13 @@ jobs:
 
     - name: Delete Snapshots Older Than 1 Day
       run: |
-        THRESHOLD_DATE=$(date -d "0 day ago" --iso-8601=seconds)
+        THRESHOLD_DATE=$(date -d "2 day ago" --iso-8601=seconds)
+        START_DATE=$(date -d "0 day ago" --iso-8601=seconds)
         echo "Looking for snapshots older than: $THRESHOLD_DATE"
 
         SNAPSHOTS=$(aws rds describe-db-snapshots \
           --snapshot-type manual \
-          --query "DBSnapshots[?SnapshotCreateTime<=\`${THRESHOLD_DATE}\`].DBSnapshotIdentifier" \
+          --query "DBSnapshots[?SnapshotCreateTime>=\`${THRESHOLD_DATE}\`&& ?SnapshotCreateTime<=`${START_DATE}`].DBSnapshotIdentifier" \
           --output text)
         echo "$SNAPSHOTS"
 

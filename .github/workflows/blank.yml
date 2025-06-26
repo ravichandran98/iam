@@ -1,7 +1,7 @@
 name: Delete RDS Snapshots Older Than 1 Day (No jq)
 
 on: 
-  workflow_dispatch:      # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   delete-old-snapshots:
@@ -11,15 +11,17 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v2
       with:
-        aws-access-key-id: AKIAWOAVSJSJMM3HJCTS
-        aws-secret-access-key: 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
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}     # ✅ Use GitHub Secrets
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: eu-west-1
 
     - name: Delete Snapshots Older Than 1 Day
       run: |
         THRESHOLD_DATE=$(date -u -d "4 days ago" --iso-8601=seconds)
         END_DATE=$(date -u -d "0 days ago" --iso-8601=seconds)
+
         echo "Looking for manual RDS snapshots between $THRESHOLD_DATE and $END_DATE"
+
         SNAPSHOTS=$(aws rds describe-db-snapshots \
           --snapshot-type manual \
           --query "DBSnapshots[?SnapshotCreateTime>=\`${THRESHOLD_DATE}\` && SnapshotCreateTime<=\`${END_DATE}\`].DBSnapshotIdentifier" \
@@ -28,7 +30,6 @@ jobs:
         echo "Snapshots found:"
         echo "$SNAPSHOTS"
 
-# Check if any snapshots found
         if [ -n "$SNAPSHOTS" ]; then
           echo "Found snapshots to delete."
 
@@ -36,7 +37,6 @@ jobs:
             echo "Initiating deletion of snapshot: $snapshot_id"
             aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
 
-    # Wait until the snapshot is fully deleted
             echo "Waiting for snapshot $snapshot_id to be deleted..."
             while true; do
               STATUS=$(aws rds describe-db-snapshots \
@@ -52,10 +52,7 @@ jobs:
                 sleep 5
               fi
             done
-
           done
         else
           echo "🚫 No manual snapshots found within the specified date range. Nothing to delete."
         fi
-          
-          

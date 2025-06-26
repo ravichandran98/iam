@@ -17,7 +17,7 @@ jobs:
 
     - name: Delete Snapshots Older Than 1 Day
       run: |
-        THRESHOLD_DATE=$(date -u -d "4 days ago" --iso-8601=seconds)
+        THRESHOLD_DATE=$(date -u -d "11 days ago" --iso-8601=seconds)
         END_DATE=$(date -u -d "0 days ago" --iso-8601=seconds)
 
         echo "Looking for manual RDS snapshots between $THRESHOLD_DATE and $END_DATE"

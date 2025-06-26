@@ -17,22 +17,33 @@ jobs:
 
     - name: Delete Snapshots Older Than 1 Day
       run: |
-        THRESHOLD_DATE=$(date -d "2 day ago" --iso-8601=seconds)
-        START_DATE=$(date -d "0 day ago" --iso-8601=seconds)
-        echo "Looking for snapshots older than: $THRESHOLD_DATE"
-
+        THRESHOLD_DATE=$(date -u -d "4 days ago" --iso-8601=seconds)
+        END_DATE=$(date -u -d "0 days ago" --iso-8601=seconds)
+        echo "Looking for manual RDS snapshots between $THRESHOLD_DATE and $END_DATE"
         SNAPSHOTS=$(aws rds describe-db-snapshots \
           --snapshot-type manual \
-          --query "DBSnapshots[?SnapshotCreateTime>=\`${THRESHOLD_DATE}\` && SnapshotCreateTime<=\`${START_DATE}\`].DBSnapshotIdentifier" \
+          --query "DBSnapshots[?SnapshotCreateTime>=\`${THRESHOLD_DATE}\` && SnapshotCreateTime<=\`${END_DATE}\`].DBSnapshotIdentifier" \
           --output text)
+        echo "Snapshots found:"
         echo "$SNAPSHOTS"
 
-        # if [ -n "$SNAPSHOTS" ]; then
-        #  echo "Found snapshots to delete:"
-        #  for snapshot_id in $SNAPSHOTS; do
-         #  echo "Deleting snapshot: $snapshot_id"
-        #    aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
-         # done
-       # else
-         # echo "✅ No manual snapshots older than 1 day found. Nothing to delete."
-      #  fi
+        if [ -n "$SNAPSHOTS" ]; then
+          echo "Found snapshots to delete."
+          for snapshot_id in $SNAPSHOTS; do
+            echo "Initiating deletion of snapshot: $snapshot_id"
+            aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
+            echo "Waiting for snapshot $snapshot_id to be deleted..."
+            while true; do
+              STATUS=$(aws rds describe-db-snapshots \
+              --snapshot-type manual \
+              --query "DBSnapshots[?DBSnapshotIdentifier=='$snapshot_id'].Status" \
+              --output text 2>/dev/null)
+
+            if [ -z "$STATUS" ]; then
+              echo "✅ Snapshot $snapshot_id has been successfully deleted."
+            break
+           else
+              echo "⌛ Snapshot $snapshot_id status: $STATUS (waiting...)"
+        sleep 5
+        fi
+        done

@@ -24,26 +24,38 @@ jobs:
           --snapshot-type manual \
           --query "DBSnapshots[?SnapshotCreateTime>=\`${THRESHOLD_DATE}\` && SnapshotCreateTime<=\`${END_DATE}\`].DBSnapshotIdentifier" \
           --output text)
+
         echo "Snapshots found:"
         echo "$SNAPSHOTS"
 
+# Check if any snapshots found
         if [ -n "$SNAPSHOTS" ]; then
           echo "Found snapshots to delete."
+
           for snapshot_id in $SNAPSHOTS; do
             echo "Initiating deletion of snapshot: $snapshot_id"
             aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
+
+    # Wait until the snapshot is fully deleted
             echo "Waiting for snapshot $snapshot_id to be deleted..."
             while true; do
               STATUS=$(aws rds describe-db-snapshots \
-              --snapshot-type manual \
-              --query "DBSnapshots[?DBSnapshotIdentifier=='$snapshot_id'].Status" \
-              --output text 2>/dev/null)
+                --snapshot-type manual \
+                --query "DBSnapshots[?DBSnapshotIdentifier=='$snapshot_id'].Status" \
+                --output text 2>/dev/null)
 
-            if [ -z "$STATUS" ]; then
-              echo "✅ Snapshot $snapshot_id has been successfully deleted."
-            break
-           else
-              echo "⌛ Snapshot $snapshot_id status: $STATUS (waiting...)"
-        sleep 5
+              if [ -z "$STATUS" ]; then
+                echo "✅ Snapshot $snapshot_id has been successfully deleted."
+                break
+              else
+                echo "⌛ Snapshot $snapshot_id status: $STATUS (waiting...)"
+                sleep 5
+              fi
+            done
+
+          done
+        else
+          echo "🚫 No manual snapshots found within the specified date range. Nothing to delete."
         fi
-        done
+          
+          

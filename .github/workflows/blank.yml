@@ -1,58 +1,68 @@
-name: Delete RDS Snapshots Older Than 1 Day (No jq)
+name: RDS Snapshot Cleanup
 
-on: 
+on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select environment'
+        required: true
+        default: 'pre-prod'
+        type: choice
+        options:
+          - pre-prod
+          - prod
 
 jobs:
-  delete-old-snapshots:
+  preprod:
+    name: Pre-Prod Cleanup (Dry Run or other logic)
     runs-on: ubuntu-latest
+    if: ${{ inputs.environment == 'pre-prod' }}
+    environment: pre-prod
 
     steps:
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: AKIAWOAVSJSJMM3HJCTS
-        aws-secret-access-key: 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
-        aws-region: eu-west-1
+      - name: Checkout (if needed)
+        uses: actions/checkout@v3
 
-    - name: Delete Snapshots Older Than 1 Day
-      run: |
-        THRESHOLD_DATE=$(date -u -d "11 days ago" --iso-8601=seconds)
-        END_DATE=$(date -u -d "0 days ago" --iso-8601=seconds)
+      - name: Pre-Prod step
+        run: |
+          echo "🏗️ This is the PRE-PROD job."
+          echo "Performing dry-run or just listing snapshots..."
+          aws rds describe-db-snapshots \
+            --snapshot-type manual \
+            --query 'DBSnapshots[*].DBSnapshotIdentifier' \
+            --output table
 
-        echo "Looking for manual RDS snapshots between $THRESHOLD_DATE and $END_DATE"
+  prod:
+    name: Prod Cleanup (Actual Snapshot Deletion)
+    runs-on: ubuntu-latest
+    if: ${{ inputs.environment == 'prod' }}
+    environment: prod
 
-        SNAPSHOTS=$(aws rds describe-db-snapshots \
-          --snapshot-type manual \
-          --query "DBSnapshots[?SnapshotCreateTime>=\`${THRESHOLD_DATE}\` && SnapshotCreateTime<=\`${END_DATE}\`].DBSnapshotIdentifier" \
-          --output text)
+    steps:
+      - name: Checkout (if needed)
+        uses: actions/checkout@v3
 
-        echo "Snapshots found:"
-        echo "$SNAPSHOTS"
+      - name: Delete manual RDS snapshots older than 30 days
+        run: |
+          THIRTY_DAYS_AGO=$(date -d '0 days ago' --utc +%s)
 
-        if [ -n "$SNAPSHOTS" ]; then
-          echo "Found snapshots to delete."
+          echo "🔍 Fetching manual RDS snapshots older than 30 days..."
 
-          for snapshot_id in $SNAPSHOTS; do
-            echo "Initiating deletion of snapshot: $snapshot_id"
-            aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot_id"
+          aws rds describe-db-snapshots \
+            --snapshot-type manual \
+            --query 'DBSnapshots[*].{ID:DBSnapshotIdentifier, Time:SnapshotCreateTime}' \
+            --output json | jq -c '.[]' |
+          while read -r snapshot; do
+            SNAPSHOT_ID=$(echo "$snapshot" | jq -r '.ID')
+            SNAPSHOT_TIME=$(echo "$snapshot" | jq -r '.Time')
+            SNAPSHOT_EPOCH=$(date -d "$SNAPSHOT_TIME" --utc +%s)
 
-            echo "Waiting for snapshot $snapshot_id to be deleted..."
-            while true; do
-              STATUS=$(aws rds describe-db-snapshots \
-                --snapshot-type manual \
-                --query "DBSnapshots[?DBSnapshotIdentifier=='$snapshot_id'].Status" \
-                --output text 2>/dev/null)
-
-              if [ -z "$STATUS" ]; then
-                echo "✅ Snapshot $snapshot_id has been successfully deleted."
-                break
-              else
-                echo "⌛ Snapshot $snapshot_id status: $STATUS (waiting...)"
-                sleep 5
-              fi
-            done
+            if [ "$SNAPSHOT_EPOCH" -lt "$THIRTY_DAYS_AGO" ]; then
+              echo "🗑️ Deleting snapshot: $SNAPSHOT_ID (created on $SNAPSHOT_TIME)"
+              aws rds delete-db-snapshot --db-snapshot-identifier "$SNAPSHOT_ID"
+              sleep 10
+            else
+              AGE=$(( ($(date +%s) - SNAPSHOT_EPOCH) / 86400 ))
+              echo "⏭️ Skipping snapshot: $SNAPSHOT_ID (only $AGE days old)"
+            fi
           done
-        else
-          echo "🚫 No manual snapshots found within the specified date range. Nothing to delete."
-        fi
